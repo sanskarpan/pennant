@@ -1,0 +1,29 @@
+{
+  "description": "flag is off, returns offVariation index 0",
+  "flag": {
+    "key": "my-flag",
+    "name": "My Flag",
+    "type": "boolean",
+    "variations": [
+      {"id": "v0", "value": false},
+      {"id": "v1", "value": true}
+    ],
+    "environments": {}
+  },
+  "flagConfig": {
+    "on": false,
+    "off_variation": 0,
+    "prerequisites": [],
+    "targets": [],
+    "rules": [],
+    "fallthrough": {"variation": 1},
+    "salt": "abc123"
+  },
+  "context": {"key": "user-1", "kind": "user"},
+  "expected": {
+    "variationIndex": 0,
+    "value": false,
+    "reason": "OFF",
+    "errorKind": null
+  }
+}

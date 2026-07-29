@@ -1,0 +1,37 @@
+{
+  "description": "clause op=semVerEqual: version=2.1.0 equals 2.1.0, rule matches",
+  "flag": {
+    "key": "clause-flag",
+    "name": "Clause Flag",
+    "type": "boolean",
+    "variations": [
+      {"id": "v0", "value": false},
+      {"id": "v1", "value": true}
+    ],
+    "environments": {}
+  },
+  "flagConfig": {
+    "on": true,
+    "off_variation": 0,
+    "prerequisites": [],
+    "targets": [],
+    "rules": [
+      {
+        "id": "r1",
+        "clauses": [
+          {"attribute": "version", "op": "semVerEqual", "values": ["2.1.0"], "negate": false}
+        ],
+        "variation": 1
+      }
+    ],
+    "fallthrough": {"variation": 0},
+    "salt": "clause-salt"
+  },
+  "context": {"key": "user-1", "kind": "user", "attributes": {"version": "2.1.0"}},
+  "expected": {
+    "variationIndex": 1,
+    "value": true,
+    "reason": "RULE_MATCH",
+    "errorKind": null
+  }
+}

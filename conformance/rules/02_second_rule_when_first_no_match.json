@@ -1,0 +1,46 @@
+{
+  "description": "rule 0 matches key=bob, rule 1 matches key=alice; context key=alice so rule 1 fires (ruleIndex=1)",
+  "flag": {
+    "key": "rules-flag",
+    "name": "Rules Flag",
+    "type": "string",
+    "variations": [
+      {"id": "v0", "value": "control"},
+      {"id": "v1", "value": "bob-treatment"},
+      {"id": "v2", "value": "alice-treatment"}
+    ],
+    "environments": {}
+  },
+  "flagConfig": {
+    "on": true,
+    "off_variation": 0,
+    "prerequisites": [],
+    "targets": [],
+    "rules": [
+      {
+        "id": "rule-bob",
+        "clauses": [
+          {"attribute": "key", "op": "in", "values": ["bob"], "negate": false}
+        ],
+        "variation": 1
+      },
+      {
+        "id": "rule-alice",
+        "clauses": [
+          {"attribute": "key", "op": "in", "values": ["alice"], "negate": false}
+        ],
+        "variation": 2
+      }
+    ],
+    "fallthrough": {"variation": 0},
+    "salt": "rules-salt"
+  },
+  "context": {"key": "alice", "kind": "user"},
+  "expected": {
+    "variationIndex": 2,
+    "value": "alice-treatment",
+    "reason": "RULE_MATCH",
+    "ruleIndex": 1,
+    "errorKind": null
+  }
+}
