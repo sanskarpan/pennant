@@ -1,0 +1,46 @@
+{
+  "description": "two rules both match context; first rule wins — returns ruleIndex 0",
+  "flag": {
+    "key": "rules-flag",
+    "name": "Rules Flag",
+    "type": "string",
+    "variations": [
+      {"id": "v0", "value": "control"},
+      {"id": "v1", "value": "treatment-a"},
+      {"id": "v2", "value": "treatment-b"}
+    ],
+    "environments": {}
+  },
+  "flagConfig": {
+    "on": true,
+    "off_variation": 0,
+    "prerequisites": [],
+    "targets": [],
+    "rules": [
+      {
+        "id": "rule-alice-key",
+        "clauses": [
+          {"attribute": "key", "op": "in", "values": ["alice"], "negate": false}
+        ],
+        "variation": 1
+      },
+      {
+        "id": "rule-example-email",
+        "clauses": [
+          {"attribute": "email", "op": "endsWith", "values": ["@example.com"], "negate": false}
+        ],
+        "variation": 2
+      }
+    ],
+    "fallthrough": {"variation": 0},
+    "salt": "rules-salt"
+  },
+  "context": {"key": "alice", "kind": "user", "attributes": {"email": "alice@example.com"}},
+  "expected": {
+    "variationIndex": 1,
+    "value": "treatment-a",
+    "reason": "RULE_MATCH",
+    "ruleIndex": 0,
+    "errorKind": null
+  }
+}
