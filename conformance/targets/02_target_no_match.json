@@ -1,0 +1,31 @@
+{
+  "description": "context key bob is not in target list, falls through to variation 0",
+  "flag": {
+    "key": "target-flag",
+    "name": "Target Flag",
+    "type": "boolean",
+    "variations": [
+      {"id": "v0", "value": false},
+      {"id": "v1", "value": true}
+    ],
+    "environments": {}
+  },
+  "flagConfig": {
+    "on": true,
+    "off_variation": 0,
+    "prerequisites": [],
+    "targets": [
+      {"context_keys": ["alice"], "variation": 1}
+    ],
+    "rules": [],
+    "fallthrough": {"variation": 0},
+    "salt": "target-salt"
+  },
+  "context": {"key": "bob", "kind": "user"},
+  "expected": {
+    "variationIndex": 0,
+    "value": false,
+    "reason": "FALLTHROUGH",
+    "errorKind": null
+  }
+}

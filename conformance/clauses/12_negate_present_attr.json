@@ -1,0 +1,37 @@
+{
+  "description": "negate=true on present attr: role=user is NOT in [admin] so match=false, negated=true, rule fires",
+  "flag": {
+    "key": "clause-flag",
+    "name": "Clause Flag",
+    "type": "boolean",
+    "variations": [
+      {"id": "v0", "value": false},
+      {"id": "v1", "value": true}
+    ],
+    "environments": {}
+  },
+  "flagConfig": {
+    "on": true,
+    "off_variation": 0,
+    "prerequisites": [],
+    "targets": [],
+    "rules": [
+      {
+        "id": "r1",
+        "clauses": [
+          {"attribute": "role", "op": "in", "values": ["admin"], "negate": true}
+        ],
+        "variation": 1
+      }
+    ],
+    "fallthrough": {"variation": 0},
+    "salt": "clause-salt"
+  },
+  "context": {"key": "user-1", "kind": "user", "attributes": {"role": "user"}},
+  "expected": {
+    "variationIndex": 1,
+    "value": true,
+    "reason": "RULE_MATCH",
+    "errorKind": null
+  }
+}

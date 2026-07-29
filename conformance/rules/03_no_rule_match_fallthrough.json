@@ -1,0 +1,37 @@
+{
+  "description": "flag has rules but none match the context; falls through to variation 0",
+  "flag": {
+    "key": "rules-flag",
+    "name": "Rules Flag",
+    "type": "boolean",
+    "variations": [
+      {"id": "v0", "value": false},
+      {"id": "v1", "value": true}
+    ],
+    "environments": {}
+  },
+  "flagConfig": {
+    "on": true,
+    "off_variation": 0,
+    "prerequisites": [],
+    "targets": [],
+    "rules": [
+      {
+        "id": "rule-premium",
+        "clauses": [
+          {"attribute": "plan", "op": "in", "values": ["premium", "enterprise"], "negate": false}
+        ],
+        "variation": 1
+      }
+    ],
+    "fallthrough": {"variation": 0},
+    "salt": "rules-salt"
+  },
+  "context": {"key": "user-1", "kind": "user", "attributes": {"plan": "free"}},
+  "expected": {
+    "variationIndex": 0,
+    "value": false,
+    "reason": "FALLTHROUGH",
+    "errorKind": null
+  }
+}

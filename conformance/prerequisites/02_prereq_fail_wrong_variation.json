@@ -1,0 +1,54 @@
+{
+  "description": "main-flag requires prereq-flag variation 1, but prereq-flag fallthrough=0 (wrong variation) -> PREREQUISITE_FAILED, returns main offVariation=0",
+  "flag": {
+    "key": "main-flag",
+    "name": "Main Flag",
+    "type": "boolean",
+    "variations": [
+      {"id": "v0", "value": false},
+      {"id": "v1", "value": true}
+    ],
+    "environments": {}
+  },
+  "flagConfig": {
+    "on": true,
+    "off_variation": 0,
+    "prerequisites": [
+      {"flag_key": "prereq-flag", "variation": 1}
+    ],
+    "targets": [],
+    "rules": [],
+    "fallthrough": {"variation": 1},
+    "salt": "main-salt"
+  },
+  "context": {"key": "user-1", "kind": "user"},
+  "prerequisites": {
+    "prereq-flag": {
+      "flag": {
+        "key": "prereq-flag",
+        "name": "Prereq Flag",
+        "type": "boolean",
+        "variations": [
+          {"id": "v0", "value": false},
+          {"id": "v1", "value": true}
+        ],
+        "environments": {}
+      },
+      "flagConfig": {
+        "on": true,
+        "off_variation": 0,
+        "prerequisites": [],
+        "targets": [],
+        "rules": [],
+        "fallthrough": {"variation": 0},
+        "salt": "prereq-salt"
+      }
+    }
+  },
+  "expected": {
+    "variationIndex": 0,
+    "value": false,
+    "reason": "PREREQUISITE_FAILED",
+    "errorKind": null
+  }
+}

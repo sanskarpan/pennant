@@ -1,0 +1,37 @@
+{
+  "description": "clause op=after: createdAt=2023-06-15 is after 2020-01-01, rule matches",
+  "flag": {
+    "key": "clause-flag",
+    "name": "Clause Flag",
+    "type": "boolean",
+    "variations": [
+      {"id": "v0", "value": false},
+      {"id": "v1", "value": true}
+    ],
+    "environments": {}
+  },
+  "flagConfig": {
+    "on": true,
+    "off_variation": 0,
+    "prerequisites": [],
+    "targets": [],
+    "rules": [
+      {
+        "id": "r1",
+        "clauses": [
+          {"attribute": "createdAt", "op": "after", "values": ["2020-01-01T00:00:00Z"], "negate": false}
+        ],
+        "variation": 1
+      }
+    ],
+    "fallthrough": {"variation": 0},
+    "salt": "clause-salt"
+  },
+  "context": {"key": "user-1", "kind": "user", "attributes": {"createdAt": "2023-06-15T12:00:00Z"}},
+  "expected": {
+    "variationIndex": 1,
+    "value": true,
+    "reason": "RULE_MATCH",
+    "errorKind": null
+  }
+}

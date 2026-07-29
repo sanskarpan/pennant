@@ -1,0 +1,55 @@
+{
+  "description": "segment rule with clause plan in [premium, enterprise]; context plan=enterprise matches segment, rule fires, variation 1",
+  "flag": {
+    "key": "seg-flag",
+    "name": "Segment Flag",
+    "type": "boolean",
+    "variations": [
+      {"id": "v0", "value": false},
+      {"id": "v1", "value": true}
+    ],
+    "environments": {}
+  },
+  "flagConfig": {
+    "on": true,
+    "off_variation": 0,
+    "prerequisites": [],
+    "targets": [],
+    "rules": [
+      {
+        "id": "r1",
+        "clauses": [
+          {"attribute": "", "op": "segmentMatch", "values": ["paid-users"], "negate": false}
+        ],
+        "variation": 1
+      }
+    ],
+    "fallthrough": {"variation": 0},
+    "salt": "seg-salt"
+  },
+  "context": {"key": "user-1", "kind": "user", "attributes": {"plan": "enterprise"}},
+  "segments": {
+    "paid-users": {
+      "key": "paid-users",
+      "name": "Paid Users",
+      "included": [],
+      "excluded": [],
+      "rules": [
+        {
+          "id": "sr1",
+          "clauses": [
+            {"attribute": "plan", "op": "in", "values": ["premium", "enterprise"], "negate": false}
+          ],
+          "bucket_by": "key"
+        }
+      ],
+      "salt": "paid-salt"
+    }
+  },
+  "expected": {
+    "variationIndex": 1,
+    "value": true,
+    "reason": "RULE_MATCH",
+    "errorKind": null
+  }
+}
