@@ -1,0 +1,132 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "feature/**"]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  go-test:
+    name: Go tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test (with race detector)
+        run: go test ./... -race -count=1 -timeout=120s
+
+      - name: Conformance tests
+        run: go test . -run TestConformance -v -count=1
+
+  ts-test:
+    name: TypeScript SDK tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        working-directory: sdk/ts
+        run: bun install
+
+      - name: Run tests
+        working-directory: sdk/ts
+        run: bun run test
+
+  frontend-build:
+    name: Frontend build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: bun install
+
+      - name: Type check
+        working-directory: frontend
+        run: bunx tsc --noEmit
+
+      - name: Build
+        working-directory: frontend
+        run: bun run build
+
+  integration-test:
+    name: Integration tests (with PostgreSQL)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: pennant_test
+          POSTGRES_USER: pennant_test
+          POSTGRES_PASSWORD: pennant_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Integration tests (in-process)
+        run: go test ./internal/integration/... -race -count=1 -timeout=60s
+
+      - name: Store integration tests (PostgreSQL)
+        run: go test ./internal/store/... -race -count=1 -timeout=60s -tags=integration
+        env:
+          TEST_DATABASE_URL: postgres://pennant_test:pennant_test@localhost:5432/pennant_test?sslmode=disable
+
+  docker-build:
+    name: Docker build
+    runs-on: ubuntu-latest
+    needs: [go-test, ts-test, frontend-build]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: false
+          tags: pennant:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
