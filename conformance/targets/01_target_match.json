@@ -1,0 +1,31 @@
+{
+  "description": "flag is on, target list for alice maps to variation 1, fallthrough is variation 0",
+  "flag": {
+    "key": "target-flag",
+    "name": "Target Flag",
+    "type": "boolean",
+    "variations": [
+      {"id": "v0", "value": false},
+      {"id": "v1", "value": true}
+    ],
+    "environments": {}
+  },
+  "flagConfig": {
+    "on": true,
+    "off_variation": 0,
+    "prerequisites": [],
+    "targets": [
+      {"context_keys": ["alice"], "variation": 1}
+    ],
+    "rules": [],
+    "fallthrough": {"variation": 0},
+    "salt": "target-salt"
+  },
+  "context": {"key": "alice", "kind": "user"},
+  "expected": {
+    "variationIndex": 1,
+    "value": true,
+    "reason": "TARGET_MATCH",
+    "errorKind": null
+  }
+}

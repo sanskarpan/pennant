@@ -1,0 +1,39 @@
+{
+  "description": "target list matches alice by key; rule also matches alice by key clause — target wins over rules",
+  "flag": {
+    "key": "target-rule-flag",
+    "name": "Target vs Rule Flag",
+    "type": "boolean",
+    "variations": [
+      {"id": "v0", "value": false},
+      {"id": "v1", "value": true}
+    ],
+    "environments": {}
+  },
+  "flagConfig": {
+    "on": true,
+    "off_variation": 0,
+    "prerequisites": [],
+    "targets": [
+      {"context_keys": ["alice"], "variation": 1}
+    ],
+    "rules": [
+      {
+        "id": "r1",
+        "clauses": [
+          {"attribute": "key", "op": "in", "values": ["alice"], "negate": false}
+        ],
+        "variation": 0
+      }
+    ],
+    "fallthrough": {"variation": 0},
+    "salt": "trflag-salt"
+  },
+  "context": {"key": "alice", "kind": "user"},
+  "expected": {
+    "variationIndex": 1,
+    "value": true,
+    "reason": "TARGET_MATCH",
+    "errorKind": null
+  }
+}

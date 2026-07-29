@@ -1,0 +1,38 @@
+{
+  "description": "rule with two clauses (AND semantics): country=US AND plan=premium; context has country=US plan=free — second clause fails, rule does not match, fallthrough",
+  "flag": {
+    "key": "rules-flag",
+    "name": "Rules Flag",
+    "type": "boolean",
+    "variations": [
+      {"id": "v0", "value": false},
+      {"id": "v1", "value": true}
+    ],
+    "environments": {}
+  },
+  "flagConfig": {
+    "on": true,
+    "off_variation": 0,
+    "prerequisites": [],
+    "targets": [],
+    "rules": [
+      {
+        "id": "rule-us-premium",
+        "clauses": [
+          {"attribute": "country", "op": "in", "values": ["US"], "negate": false},
+          {"attribute": "plan", "op": "in", "values": ["premium"], "negate": false}
+        ],
+        "variation": 1
+      }
+    ],
+    "fallthrough": {"variation": 0},
+    "salt": "rules-salt"
+  },
+  "context": {"key": "user-1", "kind": "user", "attributes": {"country": "US", "plan": "free"}},
+  "expected": {
+    "variationIndex": 0,
+    "value": false,
+    "reason": "FALLTHROUGH",
+    "errorKind": null
+  }
+}
