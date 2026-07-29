@@ -1,0 +1,55 @@
+{
+  "description": "segment has no Included/Excluded but a SegmentRule matching country=US; context country=US matches segment, rule fires, variation 1",
+  "flag": {
+    "key": "seg-flag",
+    "name": "Segment Flag",
+    "type": "boolean",
+    "variations": [
+      {"id": "v0", "value": false},
+      {"id": "v1", "value": true}
+    ],
+    "environments": {}
+  },
+  "flagConfig": {
+    "on": true,
+    "off_variation": 0,
+    "prerequisites": [],
+    "targets": [],
+    "rules": [
+      {
+        "id": "r1",
+        "clauses": [
+          {"attribute": "", "op": "segmentMatch", "values": ["us-users"], "negate": false}
+        ],
+        "variation": 1
+      }
+    ],
+    "fallthrough": {"variation": 0},
+    "salt": "seg-salt"
+  },
+  "context": {"key": "user-1", "kind": "user", "attributes": {"country": "US"}},
+  "segments": {
+    "us-users": {
+      "key": "us-users",
+      "name": "US Users",
+      "included": [],
+      "excluded": [],
+      "rules": [
+        {
+          "id": "sr1",
+          "clauses": [
+            {"attribute": "country", "op": "in", "values": ["US"], "negate": false}
+          ],
+          "bucket_by": "key"
+        }
+      ],
+      "salt": "us-salt"
+    }
+  },
+  "expected": {
+    "variationIndex": 1,
+    "value": true,
+    "reason": "RULE_MATCH",
+    "errorKind": null
+  }
+}

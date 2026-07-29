@@ -1,0 +1,47 @@
+{
+  "description": "segment beta-users has Included=[user-1]; segmentMatch clause fires rule -> variation 1",
+  "flag": {
+    "key": "seg-flag",
+    "name": "Segment Flag",
+    "type": "boolean",
+    "variations": [
+      {"id": "v0", "value": false},
+      {"id": "v1", "value": true}
+    ],
+    "environments": {}
+  },
+  "flagConfig": {
+    "on": true,
+    "off_variation": 0,
+    "prerequisites": [],
+    "targets": [],
+    "rules": [
+      {
+        "id": "r1",
+        "clauses": [
+          {"attribute": "", "op": "segmentMatch", "values": ["beta-users"], "negate": false}
+        ],
+        "variation": 1
+      }
+    ],
+    "fallthrough": {"variation": 0},
+    "salt": "seg-salt"
+  },
+  "context": {"key": "user-1", "kind": "user"},
+  "segments": {
+    "beta-users": {
+      "key": "beta-users",
+      "name": "Beta Users",
+      "included": ["user-1", "user-2"],
+      "excluded": [],
+      "rules": [],
+      "salt": "beta-salt"
+    }
+  },
+  "expected": {
+    "variationIndex": 1,
+    "value": true,
+    "reason": "RULE_MATCH",
+    "errorKind": null
+  }
+}
