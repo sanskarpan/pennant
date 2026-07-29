@@ -1,0 +1,54 @@
+{
+  "description": "prerequisite prereq-flag must be variation 1; prereq-flag is on with fallthrough=1, so prereq passes, main evaluates normally -> FALLTHROUGH variation 1",
+  "flag": {
+    "key": "main-flag",
+    "name": "Main Flag",
+    "type": "boolean",
+    "variations": [
+      {"id": "v0", "value": false},
+      {"id": "v1", "value": true}
+    ],
+    "environments": {}
+  },
+  "flagConfig": {
+    "on": true,
+    "off_variation": 0,
+    "prerequisites": [
+      {"flag_key": "prereq-flag", "variation": 1}
+    ],
+    "targets": [],
+    "rules": [],
+    "fallthrough": {"variation": 1},
+    "salt": "main-salt"
+  },
+  "context": {"key": "user-1", "kind": "user"},
+  "prerequisites": {
+    "prereq-flag": {
+      "flag": {
+        "key": "prereq-flag",
+        "name": "Prereq Flag",
+        "type": "boolean",
+        "variations": [
+          {"id": "v0", "value": false},
+          {"id": "v1", "value": true}
+        ],
+        "environments": {}
+      },
+      "flagConfig": {
+        "on": true,
+        "off_variation": 0,
+        "prerequisites": [],
+        "targets": [],
+        "rules": [],
+        "fallthrough": {"variation": 1},
+        "salt": "prereq-salt"
+      }
+    }
+  },
+  "expected": {
+    "variationIndex": 1,
+    "value": true,
+    "reason": "FALLTHROUGH",
+    "errorKind": null
+  }
+}
