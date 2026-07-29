@@ -1,0 +1,37 @@
+{
+  "description": "CRITICAL: missing attribute returns false BEFORE negation — negating a missing-attr clause does NOT flip to true; rule does not match, fallthrough applies",
+  "flag": {
+    "key": "clause-flag",
+    "name": "Clause Flag",
+    "type": "boolean",
+    "variations": [
+      {"id": "v0", "value": false},
+      {"id": "v1", "value": true}
+    ],
+    "environments": {}
+  },
+  "flagConfig": {
+    "on": true,
+    "off_variation": 0,
+    "prerequisites": [],
+    "targets": [],
+    "rules": [
+      {
+        "id": "r1",
+        "clauses": [
+          {"attribute": "nonexistent", "op": "in", "values": ["x"], "negate": true}
+        ],
+        "variation": 1
+      }
+    ],
+    "fallthrough": {"variation": 0},
+    "salt": "clause-salt"
+  },
+  "context": {"key": "user-1", "kind": "user"},
+  "expected": {
+    "variationIndex": 0,
+    "value": false,
+    "reason": "FALLTHROUGH",
+    "errorKind": null
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "description": "array attribute: tags=[free,premium], clause in [premium,enterprise] — OR semantics, matches because premium is in values",
+  "flag": {
+    "key": "clause-flag",
+    "name": "Clause Flag",
+    "type": "boolean",
+    "variations": [
+      {"id": "v0", "value": false},
+      {"id": "v1", "value": true}
+    ],
+    "environments": {}
+  },
+  "flagConfig": {
+    "on": true,
+    "off_variation": 0,
+    "prerequisites": [],
+    "targets": [],
+    "rules": [
+      {
+        "id": "r1",
+        "clauses": [
+          {"attribute": "tags", "op": "in", "values": ["premium", "enterprise"], "negate": false}
+        ],
+        "variation": 1
+      }
+    ],
+    "fallthrough": {"variation": 0},
+    "salt": "clause-salt"
+  },
+  "context": {"key": "user-1", "kind": "user", "attributes": {"tags": ["free", "premium"]}},
+  "expected": {
+    "variationIndex": 1,
+    "value": true,
+    "reason": "RULE_MATCH",
+    "errorKind": null
+  }
+}
