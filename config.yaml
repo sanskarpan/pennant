@@ -1,0 +1,44 @@
+server:
+  port: 8080
+  cors_origins: ["http://localhost:5173"]
+
+store:
+  type: "sqlite"
+  path: "./data/flags.db"
+
+stream:
+  heartbeat_interval: "25s"
+  subscriber_buffer: 32
+  replay_ring_size: 256
+  max_connections_per_env: 50000
+  slow_client_policy: "disconnect"
+
+snapshot:
+  delta_threshold: 0.30
+  compression: "gzip"
+  checksum_algorithm: "sha256"
+
+evaluation:
+  max_prerequisite_depth: 20
+  bucket_scale: 1152921504606846975
+
+analytics:
+  ingest_buffer: 4096
+  ingest_workers: 4
+  batch_size: 512
+  flush_interval: "1s"
+  dedupe_window: "60s"
+
+experiments:
+  default_alpha: 0.05
+  default_power: 0.80
+  srm_threshold: 0.001
+  msprt_tau_from_mde: 0.5
+
+sdk:
+  default_poll_interval: "30s"
+  events_flush_interval: "5s"
+  events_capacity: 10000
+
+frontend:
+  dev_port: 5173
