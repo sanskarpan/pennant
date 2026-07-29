@@ -1,0 +1,39 @@
+# Build outputs
+server
+loadgen
+/server
+/loadgen
+
+# Go build cache
+*.test
+*.out
+
+# SQLite database files
+*.db
+*.sqlite
+*.sqlite3
+*.db-shm
+*.db-wal
+tls-cache/
+
+# Environment and secrets
+.env
+.env.local
+.env.*.local
+
+# Frontend build output
+frontend/dist/
+frontend/node_modules/
+
+# TypeScript SDK dist and node_modules
+sdk/ts/dist/
+sdk/ts/node_modules/
+
+# macOS
+.DS_Store
+
+# Editor
+.idea/
+.vscode/
+*.swp
+*.swo
