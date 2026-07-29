@@ -1,0 +1,37 @@
+{
+  "description": "rollout with 100000 weight on variation 0 and 0 weight on variation 1 — any key maps to variation 0",
+  "flag": {
+    "key": "rollout-flag",
+    "name": "Rollout Flag",
+    "type": "boolean",
+    "variations": [
+      {"id": "v0", "value": false},
+      {"id": "v1", "value": true}
+    ],
+    "environments": {}
+  },
+  "flagConfig": {
+    "on": true,
+    "off_variation": 0,
+    "prerequisites": [],
+    "targets": [],
+    "rules": [],
+    "fallthrough": {
+      "rollout": {
+        "variations": [
+          {"variation": 0, "weight": 100000},
+          {"variation": 1, "weight": 0}
+        ],
+        "bucket_by": "key"
+      }
+    },
+    "salt": "rollout-salt"
+  },
+  "context": {"key": "any-user", "kind": "user"},
+  "expected": {
+    "variationIndex": 0,
+    "value": false,
+    "reason": "FALLTHROUGH",
+    "errorKind": null
+  }
+}

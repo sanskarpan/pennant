@@ -1,0 +1,38 @@
+{
+  "description": "seed overrides flag+salt for bucketing: same user-deterministic key with no-seed lands in variation 1 (bucket>0.5), with seed=42 lands in variation 0 (bucket<0.5) — SHA1('rollout-flag.rollout-salt.user-deterministic')=0.5348 vs SHA1('42.user-deterministic')=0.0113",
+  "flag": {
+    "key": "rollout-flag",
+    "name": "Rollout Flag",
+    "type": "boolean",
+    "variations": [
+      {"id": "v0", "value": false},
+      {"id": "v1", "value": true}
+    ],
+    "environments": {}
+  },
+  "flagConfig": {
+    "on": true,
+    "off_variation": 0,
+    "prerequisites": [],
+    "targets": [],
+    "rules": [],
+    "fallthrough": {
+      "rollout": {
+        "variations": [
+          {"variation": 0, "weight": 50000},
+          {"variation": 1, "weight": 50000}
+        ],
+        "bucket_by": "key",
+        "seed": 42
+      }
+    },
+    "salt": "rollout-salt"
+  },
+  "context": {"key": "user-deterministic", "kind": "user"},
+  "expected": {
+    "variationIndex": 0,
+    "value": false,
+    "reason": "FALLTHROUGH",
+    "errorKind": null
+  }
+}
