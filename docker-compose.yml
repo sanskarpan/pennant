@@ -1,0 +1,46 @@
+version: "3.9"
+
+services:
+  pennant:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      - PENNANT_ADMIN_TOKEN=${PENNANT_ADMIN_TOKEN:-}
+      - PENNANT_JWT_SECRET=${PENNANT_JWT_SECRET:-change-me-in-production}
+      - PENNANT_CORS_ORIGINS=${PENNANT_CORS_ORIGINS:-}
+      - SQLITE_PATH=/data/pennant.db
+      # Uncomment to use PostgreSQL instead of SQLite:
+      # DATABASE_URL=postgres://pennant:pennant@postgres:5432/pennant?sslmode=disable
+    volumes:
+      - pennant-data:/data
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: pennant
+      POSTGRES_USER: pennant
+      POSTGRES_PASSWORD: pennant
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pennant"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pennant-data:
+  postgres-data:
