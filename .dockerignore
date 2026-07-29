@@ -1,0 +1,10 @@
+.git
+node_modules
+frontend/node_modules
+frontend/.next
+*.md
+docs/
+.env
+*.test
+coverage/
+dist/
