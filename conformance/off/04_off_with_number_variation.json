@@ -1,0 +1,30 @@
+{
+  "description": "flag is off, offVariation=0, flag type number, returns variation 0 = 0",
+  "flag": {
+    "key": "num-flag",
+    "name": "Number Flag",
+    "type": "number",
+    "variations": [
+      {"id": "v0", "value": 0},
+      {"id": "v1", "value": 42},
+      {"id": "v2", "value": 100}
+    ],
+    "environments": {}
+  },
+  "flagConfig": {
+    "on": false,
+    "off_variation": 0,
+    "prerequisites": [],
+    "targets": [],
+    "rules": [],
+    "fallthrough": {"variation": 1},
+    "salt": "num123"
+  },
+  "context": {"key": "user-1", "kind": "user"},
+  "expected": {
+    "variationIndex": 0,
+    "value": 0,
+    "reason": "OFF",
+    "errorKind": null
+  }
+}

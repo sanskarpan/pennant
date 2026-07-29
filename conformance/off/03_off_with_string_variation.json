@@ -1,0 +1,30 @@
+{
+  "description": "flag is off, offVariation=1, flag type string, returns variation 1 = green",
+  "flag": {
+    "key": "color-flag",
+    "name": "Color Flag",
+    "type": "string",
+    "variations": [
+      {"id": "v0", "value": "red"},
+      {"id": "v1", "value": "green"},
+      {"id": "v2", "value": "blue"}
+    ],
+    "environments": {}
+  },
+  "flagConfig": {
+    "on": false,
+    "off_variation": 1,
+    "prerequisites": [],
+    "targets": [],
+    "rules": [],
+    "fallthrough": {"variation": 0},
+    "salt": "color123"
+  },
+  "context": {"key": "user-1", "kind": "user"},
+  "expected": {
+    "variationIndex": 1,
+    "value": "green",
+    "reason": "OFF",
+    "errorKind": null
+  }
+}
