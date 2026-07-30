@@ -727,6 +727,7 @@ func (s *Server) deleteFlag(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.appendAudit(r, "delete", "flag", flagKey, before, nil)
+	s.publishFlagChange(r, projectKey, before)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -807,6 +808,7 @@ func (s *Server) createSegment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.appendAudit(r, "create", "segment", seg.Key, nil, &seg)
+	s.publishFlagChange(r, projectKey, nil)
 	writeJSON(w, http.StatusCreated, seg)
 }
 
@@ -840,6 +842,7 @@ func (s *Server) updateSegment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.appendAudit(r, "update", "segment", segKey, before, &seg)
+	s.publishFlagChange(r, projectKey, nil)
 	writeJSON(w, http.StatusOK, seg)
 }
 
@@ -852,6 +855,7 @@ func (s *Server) deleteSegment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.appendAudit(r, "delete", "segment", segKey, before, nil)
+	s.publishFlagChange(r, projectKey, nil)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -914,6 +918,9 @@ func (s *Server) listAuditLog(w http.ResponseWriter, r *http.Request) {
 	if limitStr != "" {
 		if n, err := strconv.Atoi(limitStr); err == nil && n > 0 {
 			limit = n
+			if limit > 1000 {
+				limit = 1000
+			}
 		}
 	}
 	entries, err := s.store.ListAudit(projectKey, limit)
@@ -966,12 +973,20 @@ func (s *Server) sdkStream(w http.ResponseWriter, r *http.Request) {
 		fmt.Sscanf(leid, "%d", &fromVersion)
 	}
 
+	// Subscribe before sending the initial snapshot so no events are missed
+	// between the snapshot write and the subscribe call.
+	sub := s.hub.Subscribe(rec.EnvKey, rec.ProjectKey, rec.Value, r.UserAgent())
+	defer s.hub.Unsubscribe(rec.EnvKey, sub.ID)
+
+	var sentVersion int64
+
 	// Try to replay missed events
 	if msgs, ok := s.hub.Replay(rec.EnvKey, fromVersion); ok && len(msgs) > 0 {
 		for _, msg := range msgs {
 			data, _ := json.Marshal(msg.Data)
 			fmt.Fprintf(w, "id: %d\nevent: %s\ndata: %s\n\n", msg.Version, msg.Event, data)
 			flusher.Flush()
+			sentVersion = msg.Version
 		}
 	} else {
 		// Send full snapshot
@@ -981,11 +996,9 @@ func (s *Server) sdkStream(w http.ResponseWriter, r *http.Request) {
 			version, _ := s.store.GetEnvVersion(rec.ProjectKey, rec.EnvKey)
 			fmt.Fprintf(w, "id: %d\nevent: put\ndata: %s\n\n", version, data)
 			flusher.Flush()
+			sentVersion = version
 		}
 	}
-
-	sub := s.hub.Subscribe(rec.EnvKey, rec.ProjectKey, rec.Value, r.UserAgent())
-	defer s.hub.Unsubscribe(rec.EnvKey, sub.ID)
 
 	ctx := r.Context()
 	for {
@@ -995,6 +1008,10 @@ func (s *Server) sdkStream(w http.ResponseWriter, r *http.Request) {
 		case msg, open := <-sub.Ch:
 			if !open {
 				return
+			}
+			if msg.Version <= sentVersion {
+				// Already covered by the initial snapshot or replay; skip.
+				continue
 			}
 			data, _ := json.Marshal(msg.Data)
 			_, err := fmt.Fprintf(w, "id: %d\nevent: %s\ndata: %s\n\n", msg.Version, msg.Event, data)
@@ -1113,6 +1130,7 @@ func (s *Server) appendAudit(r *http.Request, action, resource, resourceID strin
 		actor = claims.Email
 	}
 	_ = s.store.AppendAudit(&store.AuditEntry{
+		ProjectKey: chi.URLParam(r, "projectKey"),
 		Actor:      actor,
 		Action:     action,
 		Resource:   resource,

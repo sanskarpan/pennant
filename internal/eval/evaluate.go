@@ -36,7 +36,8 @@ func evaluateWithDepth(
 		if !pcfg.On {
 			return offResult(flag, cfg, model.Reason{Kind: model.ReasonPrerequisiteFailed, PrerequisiteKey: p.FlagKey})
 		}
-		pIdx, _, _ := evaluateWithDepth(pf, pcfg, ctx, store, depth+1, visited)
+		// Pass a copy so sibling prereqs don't see each other's visited sets.
+		pIdx, _, _ := evaluateWithDepth(pf, pcfg, ctx, store, depth+1, copyVisited(visited))
 		if pIdx == nil || *pIdx != p.Variation {
 			return offResult(flag, cfg, model.Reason{Kind: model.ReasonPrerequisiteFailed, PrerequisiteKey: p.FlagKey})
 		}
@@ -93,6 +94,14 @@ func resolveVariationOrRollout(
 	// FLOATING-POINT SAFETY NET: return last variation if bucket rounds to 1.0
 	last := ro.Variations[len(ro.Variations)-1]
 	return variationResult(flag, last.Variation, reason)
+}
+
+func copyVisited(v map[string]bool) map[string]bool {
+	cp := make(map[string]bool, len(v))
+	for k := range v {
+		cp[k] = true
+	}
+	return cp
 }
 
 func offResult(flag *model.Flag, cfg *model.FlagConfig, reason model.Reason) (*int, any, model.Reason) {

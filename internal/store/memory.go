@@ -400,14 +400,14 @@ func (s *MemoryStore) AppendAudit(entry *AuditEntry) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	entry.ID = fmt.Sprintf("audit-%d", s.auditSeq.Add(1))
-	s.audits["global"] = append(s.audits["global"], entry)
+	s.audits[entry.ProjectKey] = append(s.audits[entry.ProjectKey], entry)
 	return nil
 }
 
 func (s *MemoryStore) ListAudit(projectKey string, limit int) ([]*AuditEntry, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	entries := s.audits["global"]
+	entries := s.audits[projectKey]
 	if limit > 0 && len(entries) > limit {
 		entries = entries[len(entries)-limit:]
 	}

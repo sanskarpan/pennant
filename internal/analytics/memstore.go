@@ -124,11 +124,14 @@ func (s *MemEventStore) QueryConversions(projectKey, envKey, flagKey, metricEven
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	// First, build a map of contextKey -> variationIndex from eval events
+	// Build contextKey -> variationIndex from eval events since the experiment start.
+	// Applying the since filter here prevents attributing conversions to exposures
+	// that happened before the experiment began.
 	ctxToVar := make(map[string]int)
 	for _, e := range s.events {
 		if e.Kind != EvalEvent || e.FlagKey != flagKey ||
-			e.EnvironmentKey != envKey || e.ProjectKey != projectKey {
+			e.EnvironmentKey != envKey || e.ProjectKey != projectKey ||
+			e.Timestamp < since {
 			continue
 		}
 		if e.VariationIndex != nil {

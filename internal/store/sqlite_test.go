@@ -108,6 +108,7 @@ func TestSqliteStore_Audit(t *testing.T) {
 	s := newTestSqlite(t)
 
 	require.NoError(t, s.AppendAudit(&AuditEntry{
+		ProjectKey: "proj",
 		Actor:      "user@example.com",
 		Action:     "update",
 		Resource:   "flag",

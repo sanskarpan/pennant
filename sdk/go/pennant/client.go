@@ -80,8 +80,11 @@ func New(opts Options) (*Client, error) {
 		opts.InitTimeout = 5 * time.Second
 	}
 	c := &Client{
-		opts:       opts,
-		httpClient: &http.Client{Timeout: 10 * time.Second},
+		opts: opts,
+		// Timeout:0 is required for SSE — http.Client.Timeout applies to the
+		// entire response lifetime and kills long-lived streaming connections.
+		// The request context (passed via NewRequestWithContext) handles cancellation.
+		httpClient: &http.Client{Timeout: 0},
 		ready:      make(chan struct{}),
 	}
 
@@ -108,16 +111,20 @@ func (c *Client) Close() {
 
 // streamLoop connects to the SSE endpoint and processes events.
 // On disconnect it retries with exponential backoff, capped at 30 s.
+// A clean server-side close resets the backoff to reconnect immediately.
 func (c *Client) streamLoop(ctx context.Context) {
 	defer c.wg.Done()
 	backoff := time.Second
 	for {
-		if err := c.connect(ctx); err != nil {
-			select {
-			case <-ctx.Done():
-				return
-			default:
-			}
+		err := c.connect(ctx)
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+		if err == nil {
+			// Clean close (server restarting etc.): reconnect quickly.
+			backoff = time.Second
 		}
 		select {
 		case <-ctx.Done():

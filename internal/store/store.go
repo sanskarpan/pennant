@@ -49,6 +49,7 @@ type ConfigStore interface {
 
 type AuditEntry struct {
 	ID         string `json:"id"`
+	ProjectKey string `json:"project_key"`
 	Actor      string `json:"actor"`
 	Action     string `json:"action"`
 	Resource   string `json:"resource"`

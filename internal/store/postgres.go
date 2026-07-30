@@ -85,6 +85,7 @@ func (s *PostgresStore) migrate(ctx context.Context) error {
 
 	CREATE TABLE IF NOT EXISTS audit_log (
 		id BIGSERIAL PRIMARY KEY,
+		project_key TEXT NOT NULL DEFAULT '',
 		actor TEXT NOT NULL,
 		action TEXT NOT NULL,
 		resource TEXT NOT NULL,
@@ -95,8 +96,14 @@ func (s *PostgresStore) migrate(ctx context.Context) error {
 	);
 
 	CREATE INDEX IF NOT EXISTS idx_audit_log_at ON audit_log (at DESC);
-	`)
-	return err
+	CREATE INDEX IF NOT EXISTS idx_audit_log_project ON audit_log (project_key, at DESC);
+	`);
+	if err != nil {
+		return err
+	}
+	// Idempotent migration: add project_key to existing databases that predate this column.
+	_, _ = s.pool.Exec(ctx, `ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS project_key TEXT NOT NULL DEFAULT ''`)
+	return nil
 }
 
 // ---- helper ----
@@ -177,8 +184,25 @@ func (s *PostgresStore) UpdateProject(p *model.Project) error {
 
 func (s *PostgresStore) DeleteProject(key string) error {
 	ctx := context.Background()
-	_, err := s.pool.Exec(ctx, `DELETE FROM projects WHERE key = $1`, key)
-	return err
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	for _, stmt := range []string{
+		`DELETE FROM flag_configs WHERE project_key = $1`,
+		`DELETE FROM env_versions WHERE project_key = $1`,
+		`DELETE FROM segments WHERE project_key = $1`,
+		`DELETE FROM flags WHERE project_key = $1`,
+		`DELETE FROM environments WHERE project_key = $1`,
+		`DELETE FROM audit_log WHERE project_key = $1`,
+		`DELETE FROM projects WHERE key = $1`,
+	} {
+		if _, err := tx.Exec(ctx, stmt, key); err != nil {
+			return err
+		}
+	}
+	return tx.Commit(ctx)
 }
 
 // ---- Environments ----
@@ -258,8 +282,21 @@ func (s *PostgresStore) UpdateEnvironment(projectKey string, env *model.Environm
 
 func (s *PostgresStore) DeleteEnvironment(projectKey, envKey string) error {
 	ctx := context.Background()
-	_, err := s.pool.Exec(ctx, `DELETE FROM environments WHERE project_key = $1 AND key = $2`, projectKey, envKey)
-	return err
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	for _, stmt := range []string{
+		`DELETE FROM flag_configs WHERE project_key = $1 AND env_key = $2`,
+		`DELETE FROM env_versions WHERE project_key = $1 AND env_key = $2`,
+		`DELETE FROM environments WHERE project_key = $1 AND key = $2`,
+	} {
+		if _, err := tx.Exec(ctx, stmt, projectKey, envKey); err != nil {
+			return err
+		}
+	}
+	return tx.Commit(ctx)
 }
 
 // ---- Flags ----
@@ -466,9 +503,9 @@ func (s *PostgresStore) IncrementEnvVersion(projectKey, envKey string) (int64, e
 func (s *PostgresStore) AppendAudit(entry *AuditEntry) error {
 	ctx := context.Background()
 	_, err := s.pool.Exec(ctx, `
-		INSERT INTO audit_log (actor, action, resource, resource_id, before_json, after_json, at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-		entry.Actor, entry.Action, entry.Resource, entry.ResourceID,
+		INSERT INTO audit_log (project_key, actor, action, resource, resource_id, before_json, after_json, at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+		entry.ProjectKey, entry.Actor, entry.Action, entry.Resource, entry.ResourceID,
 		string(entry.Before), string(entry.After), entry.At)
 	return err
 }
@@ -480,7 +517,7 @@ func (s *PostgresStore) ListAudit(projectKey string, limit int) ([]*AuditEntry, 
 	}
 	rows, err := s.pool.Query(ctx, `
 		SELECT actor, action, resource, resource_id, COALESCE(before_json,''), COALESCE(after_json,''), at
-		FROM audit_log ORDER BY id DESC LIMIT $1`, limit)
+		FROM audit_log WHERE project_key = $1 ORDER BY id DESC LIMIT $2`, projectKey, limit)
 	if err != nil {
 		return nil, err
 	}

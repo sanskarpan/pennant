@@ -1,6 +1,7 @@
 package integration
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -205,10 +206,14 @@ func TestSelfHealAfterDisconnect(t *testing.T) {
 	assert.True(t, client.BoolVariation("heal-flag", ctx, false),
 		"initial eval: flag is on")
 
-	// Close the test server to force a disconnect.
-	h.httpSrv.Close()
+	// Shutdown the test server to force a disconnect.
+	// Shutdown (unlike Close) cancels active request contexts, causing the SSE
+	// handler to exit via ctx.Done() rather than waiting for a client timeout.
+	shutCtx, shutCancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer shutCancel()
+	h.httpSrv.Config.Shutdown(shutCtx) //nolint:errcheck
 
-	// Give the client a moment to detect the TCP RST.
+	// Give the client a moment to detect the disconnect.
 	time.Sleep(50 * time.Millisecond)
 
 	// The snapshot is still in memory — evaluations must continue to work

@@ -84,6 +84,7 @@ func (s *SqliteStore) migrate() error {
 
 	CREATE TABLE IF NOT EXISTS audit_log (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		project_key TEXT NOT NULL DEFAULT '',
 		actor TEXT NOT NULL,
 		action TEXT NOT NULL,
 		resource TEXT NOT NULL,
@@ -93,7 +94,12 @@ func (s *SqliteStore) migrate() error {
 		at INTEGER NOT NULL
 	);
 	`)
-	return err
+	if err != nil {
+		return err
+	}
+	// Idempotent migration: add project_key to existing databases that predate this column.
+	_, _ = s.db.Exec(`ALTER TABLE audit_log ADD COLUMN project_key TEXT NOT NULL DEFAULT ''`)
+	return nil
 }
 
 // ---- Projects ----
@@ -160,8 +166,25 @@ func (s *SqliteStore) UpdateProject(p *model.Project) error {
 }
 
 func (s *SqliteStore) DeleteProject(key string) error {
-	_, err := s.db.Exec(`DELETE FROM projects WHERE key = ?`, key)
-	return err
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	for _, stmt := range []string{
+		`DELETE FROM flag_configs WHERE project_key = ?`,
+		`DELETE FROM env_versions WHERE project_key = ?`,
+		`DELETE FROM segments WHERE project_key = ?`,
+		`DELETE FROM flags WHERE project_key = ?`,
+		`DELETE FROM environments WHERE project_key = ?`,
+		`DELETE FROM audit_log WHERE project_key = ?`,
+		`DELETE FROM projects WHERE key = ?`,
+	} {
+		if _, err := tx.Exec(stmt, key); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }
 
 // ---- Environments ----
@@ -241,8 +264,21 @@ func (s *SqliteStore) UpdateEnvironment(projectKey string, env *model.Environmen
 }
 
 func (s *SqliteStore) DeleteEnvironment(projectKey, envKey string) error {
-	_, err := s.db.Exec(`DELETE FROM environments WHERE project_key = ? AND key = ?`, projectKey, envKey)
-	return err
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	for _, stmt := range []string{
+		`DELETE FROM flag_configs WHERE project_key = ? AND env_key = ?`,
+		`DELETE FROM env_versions WHERE project_key = ? AND env_key = ?`,
+		`DELETE FROM environments WHERE project_key = ? AND key = ?`,
+	} {
+		if _, err := tx.Exec(stmt, projectKey, envKey); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }
 
 // ---- Flags ----
@@ -430,23 +466,22 @@ func (s *SqliteStore) GetEnvVersion(projectKey, envKey string) (int64, error) {
 }
 
 func (s *SqliteStore) IncrementEnvVersion(projectKey, envKey string) (int64, error) {
-	_, err := s.db.Exec(`
+	var v int64
+	err := s.db.QueryRow(`
 		INSERT INTO env_versions (project_key, env_key, version) VALUES (?, ?, 1)
-		ON CONFLICT(project_key, env_key) DO UPDATE SET version = version + 1`,
-		projectKey, envKey)
-	if err != nil {
-		return 0, err
-	}
-	return s.GetEnvVersion(projectKey, envKey)
+		ON CONFLICT(project_key, env_key) DO UPDATE SET version = version + 1
+		RETURNING version`,
+		projectKey, envKey).Scan(&v)
+	return v, err
 }
 
 // ---- Audit ----
 
 func (s *SqliteStore) AppendAudit(entry *AuditEntry) error {
 	_, err := s.db.Exec(`
-		INSERT INTO audit_log (actor, action, resource, resource_id, before_json, after_json, at)
-		VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		entry.Actor, entry.Action, entry.Resource, entry.ResourceID,
+		INSERT INTO audit_log (project_key, actor, action, resource, resource_id, before_json, after_json, at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		entry.ProjectKey, entry.Actor, entry.Action, entry.Resource, entry.ResourceID,
 		string(entry.Before), string(entry.After), entry.At)
 	return err
 }
@@ -457,7 +492,7 @@ func (s *SqliteStore) ListAudit(projectKey string, limit int) ([]*AuditEntry, er
 	}
 	rows, err := s.db.Query(`
 		SELECT actor, action, resource, resource_id, before_json, after_json, at
-		FROM audit_log ORDER BY id DESC LIMIT ?`, limit)
+		FROM audit_log WHERE project_key = ? ORDER BY id DESC LIMIT ?`, projectKey, limit)
 	if err != nil {
 		return nil, err
 	}
