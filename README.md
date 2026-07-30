@@ -28,6 +28,10 @@ A Go backend, a React admin dashboard, and first-party SDKs for Go and TypeScrip
 
 ---
 
+## Demo
+
+![Pennant walkthrough — login, flags list, targeting rules, segments, experiments, audit log](docs/images/demo.gif)
+
 ## Screenshots
 
 **Flag list** — manage all flags across projects and environments from one view. Active flags show a green toggle; disabled flags are grey.
