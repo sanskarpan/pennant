@@ -8,11 +8,7 @@ A Go backend, a React admin dashboard, and first-party SDKs for Go and TypeScrip
 
 <br/>
 
-![CI](https://github.com/sanskarpan/pennant/actions/workflows/ci.yml/badge.svg)
-[![Docs](https://img.shields.io/badge/docs-pennant-blue)](https://sanskarpan.github.io/pennant/)
-![Go](https://img.shields.io/badge/Go-1.22+-00ADD8?logo=go&logoColor=white)
-![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)
-![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)
+![CI](https://github.com/sanskarpan/pennant/actions/workflows/ci.yml/badge.svg) [![Docs](https://img.shields.io/badge/docs-pennant-blue)](https://sanskarpan.github.io/pennant/) ![Go](https://img.shields.io/badge/Go-1.22+-00ADD8?logo=go&logoColor=white) ![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg) ![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)
 
 </div>
 
@@ -30,7 +26,7 @@ A Go backend, a React admin dashboard, and first-party SDKs for Go and TypeScrip
 
 ## Demo
 
-![Pennant walkthrough — login, flags list, targeting rules, segments, experiments, audit log](docs/images/demo.gif)
+<video autoplay loop muted playsinline src="docs/images/demo.webm" width="100%"></video>
 
 ## Screenshots
 
