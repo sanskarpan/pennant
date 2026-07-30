@@ -1,0 +1,2033 @@
+openapi: "3.0.3"
+info:
+  title: Pennant Feature Flag Service
+  description: >
+    REST API for the Pennant feature flag service. Provides a management API
+    (JWT-protected) for administering projects, environments, flags, segments,
+    and experiments, as well as an SDK API (SDK key-protected) for flag
+    evaluation and real-time streaming.
+  version: "1.0.0"
+
+servers:
+  - url: http://localhost:8080
+    description: Local development server
+
+security: []
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT access token issued by POST /auth/login or POST /auth/refresh
+    SDKKeyAuth:
+      type: http
+      scheme: bearer
+      description: SDK key issued via POST /api/v1/projects/{projectKey}/environments/{envKey}/sdk-keys
+
+  schemas:
+    # ---- Auth ----
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+          example: admin@example.com
+        password:
+          type: string
+          format: password
+          example: s3cr3t
+
+    RefreshRequest:
+      type: object
+      required: [refresh_token]
+      properties:
+        refresh_token:
+          type: string
+          example: rt_abc123
+
+    TokenPair:
+      type: object
+      properties:
+        access_token:
+          type: string
+          example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        refresh_token:
+          type: string
+          example: rt_abc123
+        expires_in:
+          type: integer
+          description: Token lifetime in seconds
+          example: 3600
+        token_type:
+          type: string
+          example: Bearer
+
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          example: usr_01
+        email:
+          type: string
+          format: email
+          example: admin@example.com
+        name:
+          type: string
+          example: Alice Admin
+        role:
+          type: string
+          enum: [viewer, editor, admin]
+          example: admin
+
+    # ---- Projects ----
+    Project:
+      type: object
+      required: [key, name]
+      properties:
+        key:
+          type: string
+          example: my-app
+        name:
+          type: string
+          example: My Application
+        description:
+          type: string
+          example: The main customer-facing application
+        environments:
+          type: array
+          items:
+            $ref: "#/components/schemas/Environment"
+
+    # ---- Environments ----
+    Environment:
+      type: object
+      required: [key, name]
+      properties:
+        key:
+          type: string
+          example: production
+        name:
+          type: string
+          example: Production
+        color:
+          type: string
+          description: Hex color for the environment badge
+          example: "#e74c3c"
+        project_key:
+          type: string
+          example: my-app
+        sdk_keys:
+          type: array
+          items:
+            $ref: "#/components/schemas/SDKKey"
+        version:
+          type: integer
+          description: Monotonically increasing version counter incremented on each config change
+          example: 42
+
+    # ---- SDK Keys ----
+    SDKKey:
+      type: object
+      properties:
+        value:
+          type: string
+          example: sdk-server-production-1718000000000
+        type:
+          type: string
+          enum: [server, client, mobile]
+          example: server
+        created_at:
+          type: string
+          format: date-time
+          example: "2024-06-10T12:00:00Z"
+
+    CreateSDKKeyRequest:
+      type: object
+      required: [type]
+      properties:
+        type:
+          type: string
+          enum: [server, client, mobile]
+          example: server
+
+    # ---- Flags ----
+    Variation:
+      type: object
+      properties:
+        id:
+          type: string
+          example: var_on
+        name:
+          type: string
+          example: On
+        description:
+          type: string
+          example: Feature is enabled
+        value:
+          description: The variation value; type depends on the flag type
+          example: true
+
+    Prerequisite:
+      type: object
+      properties:
+        flag_key:
+          type: string
+          example: enable-dark-mode
+        variation:
+          type: integer
+          description: Required variation index of the prerequisite flag
+          example: 0
+
+    Clause:
+      type: object
+      properties:
+        attribute:
+          type: string
+          example: country
+        op:
+          type: string
+          example: in
+        values:
+          type: array
+          items: {}
+          example: ["US", "CA"]
+        negate:
+          type: boolean
+          example: false
+
+    Target:
+      type: object
+      properties:
+        variation:
+          type: integer
+          description: Variation index to serve for explicitly listed user keys
+          example: 1
+        values:
+          type: array
+          items:
+            type: string
+          description: User keys to target
+          example: ["user-123", "user-456"]
+
+    WeightedVariation:
+      type: object
+      properties:
+        variation:
+          type: integer
+          example: 0
+        weight:
+          type: integer
+          description: Weight out of 100000
+          example: 50000
+
+    VariationOrRollout:
+      type: object
+      properties:
+        variation:
+          type: integer
+          nullable: true
+          description: Fixed variation index, or null when using a rollout
+          example: 1
+        rollout:
+          type: array
+          nullable: true
+          items:
+            $ref: "#/components/schemas/WeightedVariation"
+
+    Rule:
+      type: object
+      properties:
+        id:
+          type: string
+          example: rule_abc
+        clauses:
+          type: array
+          items:
+            $ref: "#/components/schemas/Clause"
+        serve:
+          $ref: "#/components/schemas/VariationOrRollout"
+        track_events:
+          type: boolean
+          example: false
+
+    FlagConfig:
+      type: object
+      properties:
+        on:
+          type: boolean
+          description: Whether the flag is enabled in this environment
+          example: true
+        prerequisites:
+          type: array
+          items:
+            $ref: "#/components/schemas/Prerequisite"
+        targets:
+          type: array
+          items:
+            $ref: "#/components/schemas/Target"
+        rules:
+          type: array
+          items:
+            $ref: "#/components/schemas/Rule"
+        fallthrough:
+          $ref: "#/components/schemas/VariationOrRollout"
+        off_variation:
+          type: integer
+          nullable: true
+          description: Variation index served when the flag is off
+          example: 0
+        salt:
+          type: string
+          example: abc123
+        track_events:
+          type: boolean
+          example: true
+        version:
+          type: integer
+          example: 5
+
+    Flag:
+      type: object
+      required: [key, name, type]
+      properties:
+        key:
+          type: string
+          example: dark-mode
+        name:
+          type: string
+          example: Dark Mode
+        description:
+          type: string
+          example: Enables the dark mode UI theme
+        type:
+          type: string
+          enum: [boolean, string, number, json]
+          example: boolean
+        variations:
+          type: array
+          items:
+            $ref: "#/components/schemas/Variation"
+        tags:
+          type: array
+          items:
+            type: string
+          example: ["ui", "beta"]
+        temporary:
+          type: boolean
+          example: false
+        archived:
+          type: boolean
+          example: false
+        created_at:
+          type: string
+          format: date-time
+          example: "2024-01-15T09:00:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2024-06-01T14:30:00Z"
+        environments:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/FlagConfig"
+          description: Map of environment key to FlagConfig
+          example:
+            production:
+              on: true
+              fallthrough:
+                variation: 1
+              off_variation: 0
+
+    # ---- Segments ----
+    SegmentClause:
+      type: object
+      properties:
+        attribute:
+          type: string
+          example: plan
+        op:
+          type: string
+          example: in
+        values:
+          type: array
+          items: {}
+          example: ["enterprise"]
+        negate:
+          type: boolean
+          example: false
+
+    SegmentRule:
+      type: object
+      properties:
+        id:
+          type: string
+          example: srule_xyz
+        clauses:
+          type: array
+          items:
+            $ref: "#/components/schemas/SegmentClause"
+        weight:
+          type: integer
+          nullable: true
+          description: Optional percentage weight (0-100000) for bucketing within the segment
+          example: null
+        bucket_by:
+          type: string
+          nullable: true
+          description: Attribute to use for bucketing
+          example: null
+
+    Segment:
+      type: object
+      required: [key, name]
+      properties:
+        key:
+          type: string
+          example: beta-users
+        name:
+          type: string
+          example: Beta Users
+        description:
+          type: string
+          example: Users enrolled in the beta program
+        included:
+          type: array
+          items:
+            type: string
+          description: User keys always included in this segment
+          example: ["user-001", "user-002"]
+        excluded:
+          type: array
+          items:
+            type: string
+          description: User keys always excluded from this segment
+          example: []
+        rules:
+          type: array
+          items:
+            $ref: "#/components/schemas/SegmentRule"
+        salt:
+          type: string
+          example: seg_salt_abc
+        version:
+          type: integer
+          example: 3
+
+    # ---- Experiments ----
+    Experiment:
+      type: object
+      properties:
+        key:
+          type: string
+          example: checkout-flow-v2
+        name:
+          type: string
+          example: Checkout Flow V2
+        project_key:
+          type: string
+          example: my-app
+        flag_key:
+          type: string
+          example: checkout-redesign
+        env_key:
+          type: string
+          example: production
+        metric_key:
+          type: string
+          example: conversion
+        created_at:
+          type: string
+          format: date-time
+          example: "2024-05-01T00:00:00Z"
+
+    ExperimentResults:
+      type: object
+      properties:
+        experiment_key:
+          type: string
+          example: checkout-flow-v2
+        computed_at:
+          type: string
+          format: date-time
+          example: "2024-06-10T12:00:00Z"
+        variations:
+          type: array
+          items:
+            type: object
+            properties:
+              variation_index:
+                type: integer
+              count:
+                type: integer
+              conversion_rate:
+                type: number
+              p_value:
+                type: number
+
+    # ---- Audit ----
+    AuditEntry:
+      type: object
+      properties:
+        id:
+          type: string
+          example: aud_01
+        actor:
+          type: string
+          description: Email of the user who performed the action
+          example: alice@example.com
+        action:
+          type: string
+          enum: [create, update, delete]
+          example: update
+        resource:
+          type: string
+          example: flag
+        resource_id:
+          type: string
+          example: dark-mode
+        before:
+          description: JSON snapshot of the resource before the change
+          nullable: true
+        after:
+          description: JSON snapshot of the resource after the change
+          nullable: true
+        at:
+          type: integer
+          description: Unix timestamp in milliseconds
+          example: 1718000000000
+
+    # ---- SDK API ----
+    EvaluationContext:
+      type: object
+      properties:
+        key:
+          type: string
+          description: Unique user/entity key for bucketing
+          example: user-12345
+        attributes:
+          type: object
+          additionalProperties: true
+          description: Arbitrary attributes for rule matching
+          example:
+            country: US
+            plan: enterprise
+            email: user@company.com
+
+    EvaluateRequest:
+      type: object
+      required: [flag_key, context]
+      properties:
+        flag_key:
+          type: string
+          example: dark-mode
+        context:
+          $ref: "#/components/schemas/EvaluationContext"
+
+    EvaluateResponse:
+      type: object
+      properties:
+        flag_key:
+          type: string
+          example: dark-mode
+        variation_index:
+          type: integer
+          nullable: true
+          example: 1
+        value:
+          description: The resolved variation value
+          example: true
+        reason:
+          type: object
+          properties:
+            kind:
+              type: string
+              enum: [OFF, FALLTHROUGH, TARGET_MATCH, RULE_MATCH, PREREQUISITE_FAILED, ERROR]
+              example: RULE_MATCH
+            rule_id:
+              type: string
+              nullable: true
+              example: rule_abc
+
+    TrackEvent:
+      type: object
+      properties:
+        kind:
+          type: string
+          description: Event type / metric key
+          example: conversion
+        user_key:
+          type: string
+          example: user-12345
+        value:
+          type: number
+          nullable: true
+          example: 1
+        properties:
+          type: object
+          additionalProperties: true
+          example:
+            revenue: 49.99
+            currency: USD
+
+    # ---- Paginated envelope ----
+    PaginatedProjects:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Project"
+        total:
+          type: integer
+          example: 5
+        limit:
+          type: integer
+          example: 50
+        offset:
+          type: integer
+          example: 0
+
+    PaginatedFlags:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Flag"
+        total:
+          type: integer
+          example: 120
+        limit:
+          type: integer
+          example: 50
+        offset:
+          type: integer
+          example: 0
+
+    PaginatedSegments:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Segment"
+        total:
+          type: integer
+          example: 10
+        limit:
+          type: integer
+          example: 50
+        offset:
+          type: integer
+          example: 0
+
+    # ---- Health ----
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [ok, degraded]
+          example: ok
+        store:
+          type: string
+          example: ok
+        version:
+          type: string
+          example: "1.0.0"
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          example: project not found
+
+paths:
+  # ---- Auth ----
+  /auth/login:
+    post:
+      summary: Authenticate a user and receive a token pair
+      operationId: authLogin
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Successful authentication
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenPair"
+        "400":
+          description: Invalid request body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/refresh:
+    post:
+      summary: Exchange a refresh token for a new token pair
+      operationId: authRefresh
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RefreshRequest"
+      responses:
+        "200":
+          description: New token pair issued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenPair"
+        "400":
+          description: Invalid request body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Invalid or expired refresh token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/me:
+    get:
+      summary: Return the currently authenticated user
+      operationId: authMe
+      tags: [Auth]
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Current user object
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ---- Projects ----
+  /api/v1/projects:
+    get:
+      summary: List all projects (paginated)
+      operationId: listProjects
+      tags: [Projects]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+            maximum: 500
+          description: Maximum number of items to return
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+          description: Number of items to skip
+      responses:
+        "200":
+          description: Paginated list of projects
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedProjects"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      summary: Create a new project
+      operationId: createProject
+      tags: [Projects]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Project"
+      responses:
+        "201":
+          description: Project created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "400":
+          description: Invalid request body or missing key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Project key already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/projects/{projectKey}:
+    parameters:
+      - name: projectKey
+        in: path
+        required: true
+        schema:
+          type: string
+        example: my-app
+    get:
+      summary: Get a project by key
+      operationId: getProject
+      tags: [Projects]
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Project object
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      summary: Update a project
+      operationId: updateProject
+      tags: [Projects]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Project"
+      responses:
+        "200":
+          description: Updated project
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "400":
+          description: Invalid request body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      summary: Delete a project
+      operationId: deleteProject
+      tags: [Projects]
+      security:
+        - BearerAuth: []
+      responses:
+        "204":
+          description: Project deleted
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ---- Audit ----
+  /api/v1/projects/{projectKey}/audit:
+    parameters:
+      - name: projectKey
+        in: path
+        required: true
+        schema:
+          type: string
+        example: my-app
+    get:
+      summary: List audit log entries for a project
+      operationId: listAuditLog
+      tags: [Audit]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 100
+          description: Maximum number of audit entries to return
+      responses:
+        "200":
+          description: Array of audit entries (most recent first)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AuditEntry"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ---- Environments ----
+  /api/v1/projects/{projectKey}/environments:
+    parameters:
+      - name: projectKey
+        in: path
+        required: true
+        schema:
+          type: string
+        example: my-app
+    get:
+      summary: List environments for a project
+      operationId: listEnvironments
+      tags: [Environments]
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Array of environments
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Environment"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      summary: Create an environment
+      operationId: createEnvironment
+      tags: [Environments]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Environment"
+      responses:
+        "201":
+          description: Environment created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Environment"
+        "400":
+          description: Invalid request body or missing key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Environment key already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/projects/{projectKey}/environments/{envKey}:
+    parameters:
+      - name: projectKey
+        in: path
+        required: true
+        schema:
+          type: string
+        example: my-app
+      - name: envKey
+        in: path
+        required: true
+        schema:
+          type: string
+        example: production
+    put:
+      summary: Update an environment
+      operationId: updateEnvironment
+      tags: [Environments]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Environment"
+      responses:
+        "200":
+          description: Updated environment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Environment"
+        "400":
+          description: Invalid request body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Environment not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      summary: Delete an environment
+      operationId: deleteEnvironment
+      tags: [Environments]
+      security:
+        - BearerAuth: []
+      responses:
+        "204":
+          description: Environment deleted
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Environment not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ---- SDK Keys ----
+  /api/v1/projects/{projectKey}/environments/{envKey}/sdk-keys:
+    parameters:
+      - name: projectKey
+        in: path
+        required: true
+        schema:
+          type: string
+        example: my-app
+      - name: envKey
+        in: path
+        required: true
+        schema:
+          type: string
+        example: production
+    get:
+      summary: List SDK keys for an environment
+      operationId: listSDKKeys
+      tags: [SDK Keys]
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Array of SDK keys
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SDKKey"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Project or environment not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      summary: Create a new SDK key
+      operationId: createSDKKey
+      tags: [SDK Keys]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSDKKeyRequest"
+      responses:
+        "201":
+          description: New SDK key created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SDKKey"
+        "400":
+          description: Invalid request body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Project or environment not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/projects/{projectKey}/environments/{envKey}/sdk-keys/{keyValue}:
+    parameters:
+      - name: projectKey
+        in: path
+        required: true
+        schema:
+          type: string
+        example: my-app
+      - name: envKey
+        in: path
+        required: true
+        schema:
+          type: string
+        example: production
+      - name: keyValue
+        in: path
+        required: true
+        schema:
+          type: string
+        example: sdk-server-production-1718000000000
+    delete:
+      summary: Revoke an SDK key
+      operationId: revokeSDKKey
+      tags: [SDK Keys]
+      security:
+        - BearerAuth: []
+      responses:
+        "204":
+          description: SDK key revoked
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: SDK key not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ---- Flags ----
+  /api/v1/projects/{projectKey}/flags:
+    parameters:
+      - name: projectKey
+        in: path
+        required: true
+        schema:
+          type: string
+        example: my-app
+    get:
+      summary: List flags for a project (paginated)
+      operationId: listFlags
+      tags: [Flags]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+            maximum: 500
+          description: Maximum number of flags to return
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+          description: Number of flags to skip
+      responses:
+        "200":
+          description: Paginated list of flags
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedFlags"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      summary: Create a flag
+      operationId: createFlag
+      tags: [Flags]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Flag"
+      responses:
+        "201":
+          description: Flag created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Flag"
+        "400":
+          description: Invalid request body, missing key, or validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Flag key already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/projects/{projectKey}/flags/{flagKey}:
+    parameters:
+      - name: projectKey
+        in: path
+        required: true
+        schema:
+          type: string
+        example: my-app
+      - name: flagKey
+        in: path
+        required: true
+        schema:
+          type: string
+        example: dark-mode
+    get:
+      summary: Get a flag by key
+      operationId: getFlag
+      tags: [Flags]
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Flag object
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Flag"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Flag not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      summary: Update a flag
+      operationId: updateFlag
+      tags: [Flags]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Flag"
+      responses:
+        "200":
+          description: Updated flag
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Flag"
+        "400":
+          description: Invalid request body or validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Flag not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      summary: Delete a flag
+      operationId: deleteFlag
+      tags: [Flags]
+      security:
+        - BearerAuth: []
+      responses:
+        "204":
+          description: Flag deleted
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Flag not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/projects/{projectKey}/flags/{flagKey}/environments/{envKey}:
+    parameters:
+      - name: projectKey
+        in: path
+        required: true
+        schema:
+          type: string
+        example: my-app
+      - name: flagKey
+        in: path
+        required: true
+        schema:
+          type: string
+        example: dark-mode
+      - name: envKey
+        in: path
+        required: true
+        schema:
+          type: string
+        example: production
+    get:
+      summary: Get the flag configuration for a specific environment
+      operationId: getFlagConfig
+      tags: [Flags]
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: FlagConfig for the environment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FlagConfig"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Flag or environment config not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      summary: Upsert the flag configuration for a specific environment
+      description: >
+        Updates or creates the per-environment targeting rules for a flag.
+        Triggers an SSE `put` event on the affected environment channel.
+      operationId: putFlagConfig
+      tags: [Flags]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FlagConfig"
+      responses:
+        "200":
+          description: Updated FlagConfig
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FlagConfig"
+        "400":
+          description: Invalid request body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ---- Segments ----
+  /api/v1/projects/{projectKey}/segments:
+    parameters:
+      - name: projectKey
+        in: path
+        required: true
+        schema:
+          type: string
+        example: my-app
+    get:
+      summary: List segments for a project (paginated)
+      operationId: listSegments
+      tags: [Segments]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+            maximum: 500
+          description: Maximum number of segments to return
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+          description: Number of segments to skip
+      responses:
+        "200":
+          description: Paginated list of segments
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedSegments"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      summary: Create a segment
+      operationId: createSegment
+      tags: [Segments]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Segment"
+      responses:
+        "201":
+          description: Segment created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Segment"
+        "400":
+          description: Invalid request body, missing key, or validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Segment key already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/projects/{projectKey}/segments/{segKey}:
+    parameters:
+      - name: projectKey
+        in: path
+        required: true
+        schema:
+          type: string
+        example: my-app
+      - name: segKey
+        in: path
+        required: true
+        schema:
+          type: string
+        example: beta-users
+    get:
+      summary: Get a segment by key
+      operationId: getSegment
+      tags: [Segments]
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Segment object
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Segment"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Segment not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      summary: Update a segment
+      operationId: updateSegment
+      tags: [Segments]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Segment"
+      responses:
+        "200":
+          description: Updated segment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Segment"
+        "400":
+          description: Invalid request body or validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Segment not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      summary: Delete a segment
+      operationId: deleteSegment
+      tags: [Segments]
+      security:
+        - BearerAuth: []
+      responses:
+        "204":
+          description: Segment deleted
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Segment not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ---- Experiments ----
+  /api/v1/projects/{projectKey}/experiments:
+    parameters:
+      - name: projectKey
+        in: path
+        required: true
+        schema:
+          type: string
+        example: my-app
+    get:
+      summary: List experiments for a project
+      operationId: listExperiments
+      tags: [Experiments]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: env
+          in: query
+          schema:
+            type: string
+          description: Filter experiments by environment key
+          example: production
+      responses:
+        "200":
+          description: Array of experiments
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Experiment"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      summary: Create an experiment
+      operationId: createExperiment
+      tags: [Experiments]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Experiment"
+      responses:
+        "201":
+          description: Experiment created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Experiment"
+        "400":
+          description: Invalid request body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Experiment key already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Experiment store not configured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/projects/{projectKey}/experiments/{expKey}/results:
+    parameters:
+      - name: projectKey
+        in: path
+        required: true
+        schema:
+          type: string
+        example: my-app
+      - name: expKey
+        in: path
+        required: true
+        schema:
+          type: string
+        example: checkout-flow-v2
+    get:
+      summary: Get the latest results for an experiment
+      operationId: getExperimentResults
+      tags: [Experiments]
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Experiment results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExperimentResults"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Results not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Experiment store not configured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ---- SDK API ----
+  /sdk/v1/snapshot:
+    get:
+      summary: Fetch a full config snapshot for the SDK's project and environment
+      operationId: sdkSnapshot
+      tags: [SDK]
+      security:
+        - SDKKeyAuth: []
+      responses:
+        "200":
+          description: Full snapshot of flags and segments
+          content:
+            application/json:
+              schema:
+                type: object
+                description: Snapshot object (flags and segments keyed by their keys)
+        "401":
+          description: Missing or invalid SDK key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Could not build snapshot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /sdk/v1/stream:
+    get:
+      summary: Subscribe to real-time flag updates via Server-Sent Events
+      description: >
+        Opens a persistent SSE connection. The server sends an initial `put`
+        event with the full snapshot, then subsequent `put` events whenever
+        the flag configuration changes. Supports resumption via the
+        `Last-Event-ID` request header.
+      operationId: sdkStream
+      tags: [SDK]
+      security:
+        - SDKKeyAuth: []
+      parameters:
+        - name: Last-Event-ID
+          in: header
+          required: false
+          schema:
+            type: string
+          description: Last seen event version for delta replay
+      responses:
+        "200":
+          description: SSE stream (Content-Type text/event-stream)
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                description: >
+                  Newline-delimited SSE frames. Each frame has:
+                  id: <version>
+                  event: put
+                  data: <JSON snapshot>
+        "401":
+          description: Missing or invalid SDK key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Streaming not supported or snapshot build failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /sdk/v1/evaluate:
+    post:
+      summary: Evaluate a single flag for a given context
+      operationId: sdkEvaluate
+      tags: [SDK]
+      security:
+        - SDKKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EvaluateRequest"
+      responses:
+        "200":
+          description: Flag evaluation result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EvaluateResponse"
+        "400":
+          description: Invalid request body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Missing or invalid SDK key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Flag not found in snapshot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Could not build snapshot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /sdk/v1/track:
+    post:
+      summary: Ingest analytics events
+      operationId: sdkTrack
+      tags: [SDK]
+      security:
+        - SDKKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: "#/components/schemas/TrackEvent"
+      responses:
+        "204":
+          description: Events accepted (no body)
+        "400":
+          description: Invalid request body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Missing or invalid SDK key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ---- Health / Observability ----
+  /health:
+    get:
+      summary: Liveness probe — checks store connectivity
+      operationId: health
+      tags: [Health]
+      responses:
+        "200":
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+        "503":
+          description: Service is degraded (store unreachable)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+
+  /ready:
+    get:
+      summary: Readiness probe — used by Kubernetes to gate traffic
+      operationId: ready
+      tags: [Health]
+      responses:
+        "200":
+          description: Service is ready to receive traffic
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ready
+        "503":
+          description: Store unavailable; not ready
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /metrics:
+    get:
+      summary: Prometheus metrics endpoint
+      description: Exposes all Pennant metrics in the Prometheus text exposition format.
+      operationId: metrics
+      tags: [Health]
+      responses:
+        "200":
+          description: Prometheus metrics text
+          content:
+            text/plain:
+              schema:
+                type: string
+
+tags:
+  - name: Auth
+    description: Authentication and session management
+  - name: Projects
+    description: Project CRUD operations
+  - name: Audit
+    description: Audit log for change history
+  - name: Environments
+    description: Environment management within a project
+  - name: SDK Keys
+    description: SDK key issuance and revocation
+  - name: Flags
+    description: Feature flag management and per-environment configuration
+  - name: Segments
+    description: User segment definitions
+  - name: Experiments
+    description: A/B experiment management and results
+  - name: SDK
+    description: SDK-facing API for flag evaluation and event tracking
+  - name: Health
+    description: Health, readiness, and observability endpoints
