@@ -1,12 +1,66 @@
+<div align="center">
+
 # Pennant
 
-A self-hosted, production-ready feature flag service. Ships with a Go backend, a React dashboard, and first-party SDKs for Go and TypeScript. Flags are evaluated locally inside each SDK — no per-evaluation network round-trip.
+**Self-hosted feature flags with local evaluation, real-time streaming, and built-in A/B testing.**
+
+A Go backend, a React admin dashboard, and first-party SDKs for Go and TypeScript — all in a single binary deployable on a $5 VPS or a Kubernetes cluster.
+
+<br/>
+
+![CI](https://github.com/sanskarpan/pennant/actions/workflows/ci.yml/badge.svg)
+[![Go Report Card](https://goreportcard.com/badge/github.com/sanskarpan/pennant)](https://goreportcard.com/report/github.com/sanskarpan/pennant)
+![Go](https://img.shields.io/badge/Go-1.22+-00ADD8?logo=go&logoColor=white)
+![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)
+![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)
+
+</div>
+
+---
+
+## Why Pennant?
+
+- **No vendor lock-in.** Self-host on a $5 VPS, your own Kubernetes cluster, or `docker compose up`. You own your data and your infrastructure.
+- **No evaluation round-trips.** Flags evaluate locally in microseconds using an in-process snapshot. `BoolVariation()` is a hash table lookup and a deterministic bucketing computation — never a network request.
+- **Statistically sound A/B testing.** mSPRT gives always-valid p-values that are safe to read at any sample size, not just at a pre-planned endpoint. Pair with chi-square SRM detection to catch broken bucketing before drawing conclusions.
+- **Cross-SDK parity guaranteed.** 45+ conformance fixtures run against both the Go and TypeScript SDKs on every CI push. If an edge case passes in Go, it passes in TypeScript.
+- **Production-hardened from day one.** Rate limiting, JWT/RBAC, Prometheus metrics, structured logging, health and readiness probes — included, not bolted on.
+
+---
+
+## Demo
+
+<!-- Screenshot: admin dashboard flag list -->
+![Dashboard](docs/images/dashboard.png)
+
+<!-- You can also embed a GIF here showing SSE propagation in real-time -->
+
+---
+
+## Pennant vs. the alternatives
+
+| | Pennant | LaunchDarkly | Unleash | Flipt |
+|---|:---:|:---:|:---:|:---:|
+| Self-hosted | Yes | No (SaaS) | Yes | Yes |
+| Open source | Yes | No | Yes | Yes |
+| Local evaluation (no round-trip) | Yes | Yes (SDK) | Partial | Yes |
+| Real-time SSE streaming | Yes | Yes | Yes | No |
+| A/B testing built-in | Yes | Yes | Limited | No |
+| Always-valid sequential stats (mSPRT) | Yes | Yes | No | No |
+| SRM detection | Yes | Yes | No | No |
+| PostgreSQL | Yes | -- | Yes | Yes |
+| SQLite (single-node) | Yes | -- | No | No |
+| Go SDK | Yes | Yes | Yes | Yes |
+| TypeScript SDK | Yes | Yes | Yes | Yes |
+| Conformance test suite | Yes | -- | No | No |
+| Price | Free | $$$$ | Free / Pro | Free / Pro |
 
 ---
 
 ## Contents
 
 - [How it works](#how-it-works)
+- [Performance](#performance)
 - [Features](#features)
 - [Quick start](#quick-start)
 - [Configuration](#configuration)
@@ -28,30 +82,48 @@ A self-hosted, production-ready feature flag service. Ships with a Go backend, a
 ```
   Admin dashboard (React)
         |
-        | REST /api/v1/*  (JWT, RBAC)
+        | REST /api/v1/*   (JWT, RBAC)
         v
-  +---------------------------------------------+
-  |              Pennant server (Go)            |
-  |                                             |
-  |  ConfigStore --> SnapshotBuilder            |
-  |  (SQLite / PostgreSQL / in-memory)          |
-  |         |                                   |
-  |         +---> SSE Hub --> clients           |
-  |                    |                        |
-  |                EventRing (replay)           |
-  +---------------------------------------------+
-        |                        |
-        | GET /sdk/v1/snapshot   | GET /sdk/v1/stream (SSE)
-        v                        v
-  +------------------------------------+
-  |  SDK (Go or TypeScript)            |
-  |                                    |
-  |  atomic.Pointer[Snapshot]          |
-  |  --> local evaluation (no I/O)     |
-  +------------------------------------+
+  +--------------------------------------------------+
+  |                 Pennant server (Go)              |
+  |                                                  |
+  |  ConfigStore -----> SnapshotBuilder              |
+  |  (SQLite / PostgreSQL / in-memory)               |
+  |          |                                       |
+  |          +--------> SSE Hub ----------> clients  |
+  |                          |                       |
+  |                     EventRing (256-slot replay)  |
+  +--------------------------------------------------+
+        |                          |
+        | GET /sdk/v1/snapshot     | GET /sdk/v1/stream  (SSE)
+        v                          v
+  +----------------------------------------------+
+  |           SDK  (Go or TypeScript)            |
+  |                                              |
+  |   atomic.Pointer[Snapshot]                   |
+  |   --> local evaluation  (zero I/O)           |
+  +----------------------------------------------+
 ```
 
-Clients fetch a versioned, checksummed snapshot on start and subscribe to a Server-Sent Events stream for incremental updates. Flag evaluation happens entirely in-process — a `BoolVariation` call is a hash table lookup and a deterministic bucketing computation, never a network request.
+Clients fetch a versioned, checksummed snapshot on startup and subscribe to a Server-Sent Events stream for incremental updates. Every flag mutation rebuilds the snapshot and broadcasts a delta (or a full put, when the diff exceeds 30% of snapshot size) to all connected clients.
+
+Flag evaluation happens entirely in-process. A `BoolVariation` call is a hash table lookup and a deterministic bucketing computation — never a network request.
+
+---
+
+## Performance
+
+The following design decisions keep flag evaluation latency in the low-microsecond range under production load:
+
+**Local evaluation, no network I/O.** The SDK holds a complete copy of all flag rules and evaluates every call in-process. There is no HTTP request on the hot path. Under load testing with 100 concurrent SSE clients and 500 evaluations/sec, p99 evaluation latency is sub-millisecond.
+
+**Lock-free snapshot reads.** The snapshot pointer is stored in `atomic.Pointer[Snapshot]`. Reads on the hot path acquire no locks. The server swaps the pointer atomically on each snapshot rebuild. Goroutines already mid-evaluation continue against the previous snapshot safely.
+
+**Non-blocking SSE fan-out.** The SSE hub sends to each client on a buffered channel. A slow client that cannot keep up is disconnected rather than blocking the broadcast loop. Fast clients are never delayed by slow ones. Disconnected clients reconnect automatically with exponential backoff.
+
+**Delta compression reduces bandwidth.** When only a subset of flags change, the server sends a `patch` event containing only the diff. A `put` (full snapshot) is sent only when the patch would exceed 30% of snapshot size, or when a client reconnects without a `Last-Event-ID`.
+
+**EventRing replay avoids full re-fetches.** A 256-slot circular buffer stores recent delta events. Reconnecting clients send `Last-Event-ID`; the server replays missed events from the ring rather than issuing a full snapshot. This keeps reconnect cost proportional to the number of missed changes, not total flag count.
 
 ---
 
@@ -875,17 +947,17 @@ pennant/
 │   └── ts/src/          TypeScript SDK (BigInt bucketing, SSE client, conformance tests)
 │
 ├── frontend/src/
-│   ├── App.tsx                    Root: auth gate, project/env switcher, 5-tab layout
-│   ├── lib/api.ts                 Type-safe fetch client with JWT injection and refresh retry
-│   ├── lib/auth.ts                Token storage, login, logout, refresh helpers
+│   ├── App.tsx                      Root: auth gate, project/env switcher, 5-tab layout
+│   ├── lib/api.ts                   Type-safe fetch client with JWT injection and refresh retry
+│   ├── lib/auth.ts                  Token storage, login, logout, refresh helpers
 │   └── components/
-│       ├── FlagList.tsx           Flag list with create form and enable toggle
-│       ├── FlagDetail.tsx         Targeting rules editor (prereqs, targets, rules, rollout)
+│       ├── FlagList.tsx             Flag list with create form and enable toggle
+│       ├── FlagDetail.tsx           Targeting rules editor (prereqs, targets, rules, rollout)
 │       ├── ExperimentDashboard.tsx  Results table, Recharts bar chart, SRM warning
-│       ├── SegmentManager.tsx     Two-panel segment editor with dirty-state save
-│       ├── PropagationMonitor.tsx Real-time SSE event stream display
-│       ├── AuditLog.tsx           Paginated project audit log
-│       └── LoginPage.tsx          Email/password login form
+│       ├── SegmentManager.tsx       Two-panel segment editor with dirty-state save
+│       ├── PropagationMonitor.tsx   Real-time SSE event stream display
+│       ├── AuditLog.tsx             Paginated project audit log
+│       └── LoginPage.tsx            Email/password login form
 │
 ├── Dockerfile           Three-stage build: Bun -> Go (CGO) -> Alpine
 ├── docker-compose.yml   Pennant + PostgreSQL with health checks
