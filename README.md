@@ -28,20 +28,36 @@ A Go backend, a React admin dashboard, and first-party SDKs for Go and TypeScrip
 
 ---
 
-## Demo
+## Screenshots
 
-The [full documentation site](https://sanskarpan.github.io/pennant/) covers the API, SDKs, evaluation model, A/B testing engine, deployment, and contributing guide.
+**Flag list** — manage all flags across projects and environments from one view. Active flags show a green toggle; disabled flags are grey.
 
-```
-# Start the server in 30 seconds
+![Flag list dashboard showing feature flags with status toggles](docs/images/dashboard.png)
+
+**Targeting rules** — per-environment rule editor. Target by any user attribute (`plan`, `country`, `email`), combine clauses with AND, set percentage rollouts, and define individual override targets — all without a deploy.
+
+![Flag detail page with targeting rules and percentage rollout editor](docs/images/flag-detail.png)
+
+**Quick start** — running locally in under 30 seconds:
+
+```bash
 git clone https://github.com/sanskarpan/pennant
 cd pennant && cp .env.example .env
+# set PENNANT_JWT_SECRET to any 32+ char string
 docker compose up
-
-# Evaluate a flag from Go
-client, _ := pennant.NewClient("http://localhost:8080", "sdk-server-default-prod")
-enabled, _ := client.BoolVariation("my-flag", pennant.Context{Key: "user-123"}, false)
 ```
+
+Open `http://localhost:8080` — login with `admin@pennant.local` / `admin`. Evaluate a flag from Go:
+
+```go
+client, _ := pennant.New(pennant.Options{
+    SDKKey:  "sdk-server-default-prod",
+    BaseURL: "http://localhost:8080",
+})
+enabled := client.BoolVariation("my-flag", pennant.Context{Key: "user-123"}, false)
+```
+
+Full docs at [sanskarpan.github.io/pennant](https://sanskarpan.github.io/pennant/).
 
 ---
 

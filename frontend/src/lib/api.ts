@@ -78,11 +78,25 @@ async function request<T>(url: string, opts?: RequestInit): Promise<T> {
   return res.json()
 }
 
+interface Paginated<T> {
+  items: T[]
+  total: number
+  limit: number
+  offset: number
+}
+
+async function requestList<T>(url: string, opts?: RequestInit): Promise<T[]> {
+  const data = await request<Paginated<T> | T[]>(url, opts)
+  if (Array.isArray(data)) return data
+  if (data && typeof data === 'object' && 'items' in data) return (data as Paginated<T>).items
+  return data as T[]
+}
+
 export const api = {
-  listProjects: () => request<Project[]>(`${BASE}/projects`),
+  listProjects: () => requestList<Project>(`${BASE}/projects`),
 
   listFlags: (projectKey: string) =>
-    request<Flag[]>(`${BASE}/projects/${projectKey}/flags`),
+    requestList<Flag>(`${BASE}/projects/${projectKey}/flags`),
 
   createFlag: (projectKey: string, flag: Partial<Flag>) =>
     request<Flag>(`${BASE}/projects/${projectKey}/flags`, {
@@ -101,10 +115,17 @@ export const api = {
       method: 'DELETE',
     }),
 
-  getFlagConfig: (projectKey: string, flagKey: string, envKey: string) =>
-    request<FlagConfig>(
+  getFlagConfig: async (projectKey: string, flagKey: string, envKey: string): Promise<FlagConfig> => {
+    const raw = await request<Record<string, unknown>>(
       `${BASE}/projects/${projectKey}/flags/${flagKey}/environments/${envKey}`
-    ),
+    )
+    // Normalize server field names to what the UI expects
+    const targets = ((raw.targets as Array<Record<string, unknown>> | null) ?? []).map(t => ({
+      values: (t.values ?? t.context_keys ?? []) as string[],
+      variation: t.variation as number,
+    }))
+    return { ...raw, targets, offVariation: raw.off_variation ?? raw.offVariation ?? null } as unknown as FlagConfig
+  },
 
   putFlagConfig: (projectKey: string, flagKey: string, envKey: string, cfg: FlagConfig) =>
     request<FlagConfig>(
@@ -120,7 +141,7 @@ export const api = {
 
   // Experiments
   listExperiments: (projectKey: string) =>
-    request<Experiment[]>(`${BASE}/projects/${projectKey}/experiments`).catch(() => [] as Experiment[]),
+    request<Experiment[] | null>(`${BASE}/projects/${projectKey}/experiments`).then(r => r ?? [] as Experiment[]).catch(() => [] as Experiment[]),
 
   getExperimentResults: (projectKey: string, expKey: string) =>
     request<ExperimentResults>(`${BASE}/projects/${projectKey}/experiments/${expKey}/results`).catch(() => null),
