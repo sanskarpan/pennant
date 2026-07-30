@@ -26,7 +26,7 @@ A Go backend, a React admin dashboard, and first-party SDKs for Go and TypeScrip
 
 ## Demo
 
-<video autoplay loop muted playsinline src="docs/images/demo.webm" width="100%"></video>
+![Pennant walkthrough — login, flags list, targeting rules, segments, experiments, audit log](docs/images/demo.gif)
 
 ## Screenshots
 
