@@ -9,7 +9,7 @@ A Go backend, a React admin dashboard, and first-party SDKs for Go and TypeScrip
 <br/>
 
 ![CI](https://github.com/sanskarpan/pennant/actions/workflows/ci.yml/badge.svg)
-[![Go Report Card](https://goreportcard.com/badge/github.com/sanskarpan/pennant)](https://goreportcard.com/report/github.com/sanskarpan/pennant)
+[![Docs](https://img.shields.io/badge/docs-pennant-blue)](https://sanskarpan.github.io/pennant/)
 ![Go](https://img.shields.io/badge/Go-1.22+-00ADD8?logo=go&logoColor=white)
 ![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)
@@ -30,10 +30,18 @@ A Go backend, a React admin dashboard, and first-party SDKs for Go and TypeScrip
 
 ## Demo
 
-<!-- Screenshot: admin dashboard flag list -->
-![Dashboard](docs/images/dashboard.png)
+The [full documentation site](https://sanskarpan.github.io/pennant/) covers the API, SDKs, evaluation model, A/B testing engine, deployment, and contributing guide.
 
-<!-- You can also embed a GIF here showing SSE propagation in real-time -->
+```
+# Start the server in 30 seconds
+git clone https://github.com/sanskarpan/pennant
+cd pennant && cp .env.example .env
+docker compose up
+
+# Evaluate a flag from Go
+client, _ := pennant.NewClient("http://localhost:8080", "sdk-server-default-prod")
+enabled, _ := client.BoolVariation("my-flag", pennant.Context{Key: "user-123"}, false)
+```
 
 ---
 

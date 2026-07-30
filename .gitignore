@@ -37,3 +37,6 @@ sdk/ts/node_modules/
 .vscode/
 *.swp
 *.swo
+
+# Internal planning docs (not for public docs site)
+docs/superpowers/

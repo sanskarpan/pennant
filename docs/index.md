@@ -54,20 +54,28 @@ Self-hosted feature flag service with real-time SSE streaming, built-in A/B test
 
 ## Architecture at a glance
 
-```
-┌────────────┐   JWT Bearer   ┌─────────────────────────────────────────┐
-│  Dashboard │ ─────────────► │              REST API (/api/v1/...)      │
-│  (React)   │                │                                          │
-└────────────┘                │  ┌─────────┐  ┌──────────┐  ┌────────┐ │
-                              │  │  Flags  │  │ Segments │  │  Exps  │ │
-┌────────────┐   SDK Key      │  └────┬────┘  └────┬─────┘  └───┬────┘ │
-│  Your App  │ ─────────────► │       └─────────────┴────────────┘      │
-│  (SDK)     │                │               ConfigStore                │
-│            │◄── SSE ──────  │       ┌──────────────────────────┐      │
-│            │   /sdk/v1/     │       │  SQLite / PostgreSQL /   │      │
-│            │   stream       │       │      in-memory           │      │
-└────────────┘                │       └──────────────────────────┘      │
-                              └─────────────────────────────────────────┘
+```mermaid
+graph TD
+    subgraph Clients
+        A["Dashboard (React)"]
+        B["Your App (Go/TS SDK)"]
+    end
+
+    subgraph Server ["Pennant Server (Go)"]
+        C["REST API\n/api/v1/..."]
+        D["SSE Hub\n/sdk/v1/stream"]
+        E["ConfigStore"]
+        F["SnapshotBuilder"]
+        G[("SQLite / PostgreSQL\n/ in-memory")]
+    end
+
+    A -- "JWT Bearer\n/api/v1/*" --> C
+    B -- "SDK Key\n/sdk/v1/snapshot" --> F
+    C --> E
+    E --> G
+    E --> F
+    F --> D
+    D -- "SSE stream\n(put / patch / heartbeat)" --> B
 ```
 
 Flags are evaluated **entirely inside the SDK process**. The server is only on the critical path for initial snapshot load and for streaming incremental flag updates. Once the SDK has its snapshot, evaluation continues even if the server is temporarily unreachable.
